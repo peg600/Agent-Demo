@@ -4,11 +4,13 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgSchema,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // Business tables belong here; LangGraph checkpoint tables are managed separately.
@@ -69,12 +71,74 @@ export const messages = appSchema.table(
     content: text('content').notNull(),
     sequence: integer('sequence').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    runId: uuid('run_id').references((): AnyPgColumn => workflowRuns.id, { onDelete: 'set null' }),
+    sources: jsonb('sources').notNull().default([]),
   },
   (t) => [
     uniqueIndex('messages_conversation_client_idx').on(t.conversationId, t.clientMessageId),
     uniqueIndex('messages_conversation_sequence_idx').on(t.conversationId, t.sequence),
+    uniqueIndex('messages_assistant_run_idx')
+      .on(t.runId)
+      .where(sql`${t.role} = 'assistant'`),
     check('messages_sequence', sql`${t.sequence} > 0`),
     check('messages_role', sql`${t.role} in ('user', 'assistant', 'system')`),
+  ],
+);
+
+export const workflowRuns = appSchema.table(
+  'workflow_runs',
+  {
+    id: uuid('id').primaryKey(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    userMessageId: uuid('user_message_id')
+      .notNull()
+      .references((): AnyPgColumn => messages.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('queued'),
+    input: text('input').notNull(),
+    history: jsonb('history').notNull().default([]),
+    graphVersion: text('graph_version').notNull().default('qa-v1'),
+    leaseToken: uuid('lease_token'),
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    nextEventSequence: integer('next_event_sequence').notNull().default(1),
+    errorCode: text('error_code'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('workflow_runs_message_idx').on(t.userMessageId),
+    uniqueIndex('workflow_runs_active_conversation_idx')
+      .on(t.conversationId)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    index('workflow_runs_claim_idx').on(t.status, t.leaseUntil, t.createdAt),
+    index('workflow_runs_conversation_idx').on(t.conversationId, t.createdAt),
+    check(
+      'workflow_runs_status',
+      sql`${t.status} in ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
+    check('workflow_runs_counts', sql`${t.attempts} >= 0 AND ${t.nextEventSequence} > 0`),
+  ],
+);
+
+export const runEvents = appSchema.table(
+  'run_events',
+  {
+    id: uuid('id').primaryKey(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: 'cascade' }),
+    seq: integer('seq').notNull(),
+    type: text('type').notNull(),
+    message: text('message'),
+    taskId: text('task_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('run_events_sequence_idx').on(t.runId, t.seq),
+    check('run_events_sequence', sql`${t.seq} > 0`),
   ],
 );
 

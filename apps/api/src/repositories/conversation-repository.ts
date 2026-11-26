@@ -68,7 +68,7 @@ type MessageRow = Omit<ConversationMessage, 'createdAt'> & { createdAt: Date };
 const conversationColumns =
   'id, title, created_at AS "createdAt", updated_at AS "updatedAt", message_count AS "messageCount", next_sequence AS "nextSequence"';
 const messageColumns =
-  'id, conversation_id AS "conversationId", client_message_id AS "clientMessageId", role, content, sequence, created_at AS "createdAt"';
+  'id, conversation_id AS "conversationId", client_message_id AS "clientMessageId", role, content, sequence, created_at AS "createdAt", run_id AS "runId", sources';
 const conversation = (row: ConversationRow): Conversation => ({
   id: row.id,
   title: row.title,
@@ -81,8 +81,7 @@ const message = (row: MessageRow): ConversationMessage => ({
   createdAt: row.createdAt.toISOString(),
 });
 
-export function createConversationRepository(): ConversationRepository {
-  const pool = createLazyPool();
+export function createConversationRepository(pool = createLazyPool()): ConversationRepository {
   async function transaction<T>(
     work: (client: PoolClient) => Promise<T>,
     readOnly = false,
@@ -209,23 +208,62 @@ export function createConversationRepository(): ConversationRepository {
         const previous = existing.rows[0];
         if (previous) {
           if (previous.content !== input.content) throw conflict();
-          return { data: message(previous), duplicate: true, processing: 'not_configured' };
+          return {
+            data: message(previous),
+            duplicate: true,
+            processing: previous.runId ? 'queued' : 'not_configured',
+            runId: previous.runId,
+          };
         }
+        const active = await client.query(
+          "SELECT id FROM app.workflow_runs WHERE conversation_id = $1 AND status IN ('queued', 'running')",
+          [id],
+        );
+        if (active.rowCount)
+          throw new ConversationError(
+            409,
+            'RUN_ACTIVE',
+            '当前会话还有任务正在处理，请等待完成或取消后再发送。',
+          );
         if (current.nextSequence >= 2147483647)
           throw new ConversationError(
             409,
             'CONVERSATION_FULL',
             '该会话已达到消息数量上限，请新建会话。',
           );
+        // Snapshot only prior turns, bounded independently of the model context window.
+        const recent = await client.query<{ role: 'user' | 'assistant'; content: string }>(
+          "SELECT role, LEFT(content, 4000) AS content FROM app.messages WHERE conversation_id = $1 AND role IN ('user', 'assistant') ORDER BY sequence DESC LIMIT 20",
+          [id],
+        );
+        let remaining = 20000;
+        const history = recent.rows
+          .map((turn) => {
+            const content = turn.content.slice(0, remaining);
+            remaining -= content.length;
+            return { role: turn.role, content };
+          })
+          .filter((turn) => turn.content.length > 0)
+          .reverse();
         const inserted = await client.query<MessageRow>(
           `INSERT INTO app.messages (id, conversation_id, client_message_id, role, content, sequence, created_at) VALUES ($1, $2, $3, 'user', $4, $5, $6) RETURNING ${messageColumns}`,
           [randomUUID(), id, input.clientMessageId, input.content, current.nextSequence, now],
         );
+        const runId = randomUUID();
+        await client.query(
+          'INSERT INTO app.workflow_runs (id, conversation_id, user_message_id, input, history, created_at, updated_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $6)',
+          [runId, id, inserted.rows[0]!.id, input.content, JSON.stringify(history), now],
+        );
+        await client.query('UPDATE app.messages SET run_id = $2 WHERE id = $1', [
+          inserted.rows[0]!.id,
+          runId,
+        ]);
+        inserted.rows[0]!.runId = runId;
         await client.query(
           'UPDATE app.conversations SET next_sequence = next_sequence + 1, message_count = message_count + 1, updated_at = GREATEST(updated_at, $3) WHERE id = $1 AND visitor_id = $2',
           [id, owner, now],
         );
-        return { data: message(inserted.rows[0]!), duplicate: false, processing: 'not_configured' };
+        return { data: message(inserted.rows[0]!), duplicate: false, processing: 'queued', runId };
       });
     },
     history(digest, id, query, now) {

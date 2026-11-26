@@ -83,20 +83,22 @@ function fakeRepository() {
       );
       if (previous) {
         if (previous.content !== input.content) throw conflict();
-        return { data: previous, duplicate: true, processing: 'not_configured' };
+        return { data: previous, duplicate: true, processing: 'not_configured', runId: null };
       }
       const data: ConversationMessage = {
         id: randomUUID(),
         conversationId: id,
         ...input,
         role: 'user',
+        runId: null,
+        sources: [],
         sequence: record.messages.length + 1,
         createdAt: now.toISOString(),
       };
       record.messages.push(data);
       record.data.messageCount += 1;
       record.data.updatedAt = now.toISOString();
-      return { data, duplicate: false, processing: 'not_configured' };
+      return { data, duplicate: false, processing: 'not_configured', runId: null };
     },
     async history(digest, id, query, now) {
       const records = owned(digest, id, now).messages.filter(
