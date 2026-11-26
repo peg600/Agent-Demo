@@ -6,10 +6,20 @@ import {
   type AuctionRepository,
 } from './repositories/auction-repository.js';
 import { registerAuctionRoutes } from './routes/auctions.js';
+import {
+  createConversationRepository,
+  type ConversationRepository,
+} from './repositories/conversation-repository.js';
+import { registerConversationRoutes, type ConversationConfig } from './routes/conversations.js';
 
 export function buildApp(
   logLevel = 'info',
-  options: { auctionRepository?: AuctionRepository; clock?: () => Date } = {},
+  options: {
+    auctionRepository?: AuctionRepository;
+    conversationRepository?: ConversationRepository;
+    conversationConfig?: () => ConversationConfig;
+    clock?: () => Date;
+  } = {},
 ) {
   const app = Fastify({
     logger: {
@@ -27,6 +37,16 @@ export function buildApp(
   const repository = options.auctionRepository ?? createAuctionRepository();
   registerAuctionRoutes(app, repository, options.clock ?? (() => new Date()));
   app.addHook('onClose', () => repository.close());
+  const conversationRepository = options.conversationRepository ?? createConversationRepository();
+  app.register(async (scope) => {
+    await registerConversationRoutes(
+      scope,
+      conversationRepository,
+      options.clock ?? (() => new Date()),
+      options.conversationConfig,
+    );
+  });
+  app.addHook('onClose', () => conversationRepository.close());
 
   return app;
 }

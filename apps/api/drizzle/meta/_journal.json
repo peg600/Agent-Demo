@@ -8,6 +8,13 @@
       "when": 1795711416028,
       "tag": "0000_same_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795713807624,
+      "tag": "0001_conversation_history",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,82 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, pgSchema, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
-// Only the catalogue belongs here; LangGraph checkpoint tables are managed separately.
+// Business tables belong here; LangGraph checkpoint tables are managed separately.
 export const appSchema = pgSchema('app');
+
+export const visitors = appSchema.table('visitors', {
+  id: uuid('id').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+});
+
+export const visitorSessions = appSchema.table(
+  'visitor_sessions',
+  {
+    tokenDigest: text('token_digest').primaryKey(),
+    visitorId: uuid('visitor_id')
+      .notNull()
+      .references(() => visitors.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index('visitor_sessions_visitor_idx').on(t.visitorId),
+    index('visitor_sessions_expiry_idx').on(t.expiresAt),
+    check('visitor_sessions_expiry_order', sql`${t.expiresAt} > ${t.createdAt}`),
+  ],
+);
+
+export const conversations = appSchema.table(
+  'conversations',
+  {
+    id: uuid('id').primaryKey(),
+    visitorId: uuid('visitor_id')
+      .notNull()
+      .references(() => visitors.id, { onDelete: 'cascade' }),
+    clientConversationId: uuid('client_conversation_id').notNull(),
+    title: text('title').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+    messageCount: integer('message_count').notNull().default(0),
+    nextSequence: integer('next_sequence').notNull().default(1),
+  },
+  (t) => [
+    uniqueIndex('conversations_visitor_client_idx').on(t.visitorId, t.clientConversationId),
+    index('conversations_visitor_updated_idx').on(t.visitorId, t.updatedAt, t.id),
+    check('conversations_count', sql`${t.messageCount} >= 0 AND ${t.nextSequence} > 0`),
+  ],
+);
+
+export const messages = appSchema.table(
+  'messages',
+  {
+    id: uuid('id').primaryKey(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    clientMessageId: uuid('client_message_id'),
+    role: text('role').notNull(),
+    content: text('content').notNull(),
+    sequence: integer('sequence').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('messages_conversation_client_idx').on(t.conversationId, t.clientMessageId),
+    uniqueIndex('messages_conversation_sequence_idx').on(t.conversationId, t.sequence),
+    check('messages_sequence', sql`${t.sequence} > 0`),
+    check('messages_role', sql`${t.role} in ('user', 'assistant', 'system')`),
+  ],
+);
 
 export const auctionEvents = appSchema.table(
   'auction_events',
