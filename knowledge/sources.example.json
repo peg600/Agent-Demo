@@ -1,0 +1,14 @@
+{
+  "sources": [
+    {
+      "documentId": "REPLACE_WITH_RAGFLOW_DOCUMENT_ID",
+      "datasetId": "REPLACE_WITH_RAGFLOW_DATASET_ID",
+      "title": "本地演示参拍咨询须知（非官方规则）",
+      "version": "demo-2026-11-27-v1",
+      "url": null,
+      "approved": false,
+      "effectiveAt": "2026-11-27T00:00:00+08:00",
+      "expiresAt": "2027-11-27T00:00:00+08:00"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ test-results/
 # 开发机上的数据、备份和日志
 /.local/
 /data/
+/knowledge/sources.local.json
 /backups/
 /volumes/
 *.dump

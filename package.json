@@ -19,6 +19,7 @@
     "deps:check": "node scripts/check-dependencies.mjs",
     "db:generate": "pnpm --filter @gard/api db:generate",
     "db:migrate": "pnpm --filter @gard/api db:migrate",
+    "db:checkpoints": "pnpm --filter @gard/api db:checkpoints",
     "db:seed": "pnpm --filter @gard/contracts build && pnpm --filter @gard/api db:seed",
     "check": "pnpm deps:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
