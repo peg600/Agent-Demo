@@ -24,6 +24,9 @@ export default defineConfig([
     rules: {
       'vue/singleline-html-element-content-newline': 'off',
       'vue/max-attributes-per-line': 'off',
+      'vue/html-indent': 'off',
+      'vue/html-closing-bracket-newline': 'off',
+      'vue/html-self-closing': 'off',
     },
   },
   { languageOptions: { globals: { ...globals.node, ...globals.browser } } },
