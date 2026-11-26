@@ -3,13 +3,14 @@ An AI Customer Support Agent Demo
 
 嘉德智能客服 Agent 的 Windows 本地演示项目，目标包括参拍须知问答、拍场查询推荐、对话表单、多问题拆解及中断恢复。业务使用虚构资料，不连接真实拍卖生产系统。
 
-技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有基础设施、拍卖目录，以及匿名会话和历史消息的前后端代码与迁移；完整客服Agent尚未实现，数据库与浏览器联调仍待执行。
+技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有拍卖目录、匿名会话、知识问答与只读Agent工作流、运行状态及引用展示的前后端代码。数据库、模型、RAGFlow与浏览器联调仍待执行；表单和完整观测尚未实现。
 
 ## 开发入口
 
 - [前后端开发环境](docs/development-toolchain.md)：依赖、启动、构建、检查和测试命令。
 - [拍卖会与拍场模块](docs/auction-catalog.md)：演示目录、数据初始化、接口与页面。
-- [会话与历史消息](docs/conversations.md)：匿名身份、会话列表、消息保存和分页历史；入口 `/chat`，智能回复尚未接入。
+- [会话与历史消息](docs/conversations.md)：匿名身份、会话列表、消息保存和分页历史，入口 `/chat`。
+- [知识问答与Agent工作流](docs/knowledge-workflow.md)：模型/知识库配置、检查点初始化、任务执行、SSE与来源展示。
 - [架构与接口](docs/architecture.md)：服务分工、工作流、数据一致性和恢复方案。
 - [本地启动手册](docs/local-development.md)：Docker、端口、密钥、RAGFlow 和 Langfuse 准备步骤。
 - [Docker 配置与 G 盘数据](docs/docker-local.md)：统一 Compose 入口、端口、绑定目录和启动命令。

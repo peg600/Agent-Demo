@@ -1,16 +1,16 @@
 # 嘉德智能客服 Agent 本地架构
 
-文档版本：7。更新日期：2026-11-27。关联 DEC-001 至 DEC-008、TASK-007 r1。
+文档版本：8。更新日期：2026-11-27。关联 DEC-001 至 DEC-009、TASK-008 r1。
 
 按用户提供的中国嘉德智能客服场景，建设可在个人 Windows 电脑演示、调试和验收的系统，覆盖 FDE 的需求拆解、系统集成、Agent 编排及交付说明。以下为实现目标，不表示已接入中国嘉德生产系统或已完成所述项目经历。
 
 ## 当前实现与设计边界
 
-已有协作文档、环境模板、根 Compose、PostgreSQL/RAGFlow 本地配置、Langfuse 覆盖配置及准备脚本。TASK-006 已实现拍卖会/拍场的共享契约、3场拍卖会及12个拍场的虚构种子、Drizzle表及迁移、只读查询/详情/筛选/规则推荐API、Vue列表和详情页面。TASK-007增加匿名身份、会话归属、会话列表与详情、幂等保存用户消息及历史分页的前后端代码。数据库迁移、种子与浏览器联调尚未执行；PG/RAGFlow数据配置绑定项目data/，本轮未启动业务容器。助手回复、SSE、表单、工作流和模型/检索服务集成仍待实现。见 [会话模块](conversations.md)、[拍卖目录模块](auction-catalog.md)、[前后端开发环境](development-toolchain.md)、[Docker配置](docker-local.md)，实际验证状态见result.md。
+已有协作文档、环境模板、Docker基础设施、拍卖目录、匿名会话与消息历史。TASK-008增加知识检索/结构化模型适配器、LangGraph只读任务工作流、PostgresSaver检查点、持久化运行与事件、SSE、前端运行状态和引用。当前代码可以将消息排队并生成助手回答，但真实数据库迁移、种子、模型/RAGFlow与浏览器联调尚未执行；本轮未启动业务容器。表单interrupt/resume、咨询提交及Langfuse追踪仍待实现。见 [知识问答与工作流](knowledge-workflow.md)、[会话模块](conversations.md)、[拍卖目录模块](auction-catalog.md)，实际验证状态见result.md。
 
 用户指定 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker。数据库和 RAGFlow 运行在 Docker Desktop；前后端和自有容器配置集中在本仓库。模型通过 OpenAI API 调用，密钥稍后配置。
 
-工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright。Drizzle目前管理app.auction_events、app.auctions及visitors、visitor_sessions、conversations、messages，运行表和其余业务表仍待实现。仓储使用pg参数化查询与事务，不需要模型密钥；数据库不可用返回503。初版Agent仍计划单API进程与持久化运行表，不增加独立调度队列或多Agent自主协作。
+工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright。Drizzle管理app.auction_events、app.auctions、visitors、visitor_sessions、conversations、messages、workflow_runs、run_events；检查点由PostgresSaver独立管理。目录与历史不依赖模型密钥，数据库不可用返回503；Agent缺配置产生明确失败。单API进程调度持久化运行表，不增加独立队列或多Agent自主协作。
 
 ## 本地拓扑
 
@@ -72,7 +72,7 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 
 输入鉴权 → 结构化拆解 → 程序校验任务依赖 DAG → 调度就绪任务 → 工具调用或表单追问 → 汇总回答和引用。
 
-规划输出包含 `taskId`、`type`、`dependsOn`、`arguments`。任务类型限知识问答、拍场查询、咨询收集；最多 5 个，依赖有效且无环。规划失败最多修正一次，仍失败则澄清。初版按拓扑顺序串行执行。
+规划输出包含 `taskId`、`type`、`dependsOn`、`arguments`和question。当前任务类型为知识问答、拍场查询、澄清；咨询收集留到表单阶段。最多5个，依赖有效且无环。规划失败最多修正一次，仍失败则澄清，按拓扑顺序串行执行。当前汇总按顺序拼接各任务结果，不额外让模型改写引用。
 
 每次运行最多 8 次工具调用，含重试；只读工具默认超时 15 秒，模型 60 秒。可恢复网络错误最多退避重试一次；鉴权、余额不足、无效参数、业务拒绝不循环重试。运行总预算、图递归上限和取消检查由程序执行。
 
@@ -86,15 +86,15 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 | --- | --- |
 | `visitors`、`visitor_sessions`（已定义） | 服务端访问者、令牌HMAC摘要、固定30天过期时间 |
 | `conversations`（已定义） | `id`、`visitor_id`归属、标题、时间、消息数量、下一消息序号；同访客client_conversation_id唯一 |
-| `messages`（已定义） | 会话、角色、内容、序号；同会话client_message_id及sequence唯一。引用与run_id/output_kind在工作流阶段增加 |
-| `workflow_runs` | 归属会话、状态、图版本、租约、错误；运行 ID 即 graph thread ID |
-| `run_events` | 事件及载荷；`(run_id, seq)` 唯一 |
+| `messages`（已定义） | 会话、角色、内容、序号、run_id、sources；同会话client_message_id及sequence唯一，每run最终assistant消息唯一 |
+| `workflow_runs`（已定义） | 归属会话、原消息、输入/历史快照、状态、图版本、租约令牌/期限、重试次数、错误；运行ID即graph thread ID |
+| `run_events`（已定义） | 事件类型、文本、taskId及时间；`(run_id, seq)`唯一 |
 | `form_drafts` | 归属、结构化字段、缺项、版本、确认版本、状态 |
 | `consultations` | `draft_id` 唯一、回执、提交时间 |
 | `idempotency_requests` | 归属、操作、稳定 key、请求摘要、完整结果；唯一约束 |
 | `auction_events`（已定义） | 演示拍卖会、城市、场馆、地址、预展/拍卖起止时间、来源说明 |
 | `auctions`（已定义） | 演示拍场、event_id外键、类别、厅名、起止时间、拍品数；状态按查询时间计算 |
-| `knowledge_sources` | 文档 ID、来源 URL、标题、版本、生效/失效时间和审核状态 |
+| `knowledge_sources`（规划） | 当前以knowledge/sources.local.json承载同类来源映射，含dataset/document ID、URL、标题、版本、有效期和审核状态；数据库管理阶段再迁移 |
 
 时间存 UTC、显示 Asia/Shanghai；“下周”先转换成明确日期范围，不足则追问。
 
@@ -108,11 +108,11 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 
 每个会话可有多条工作流，初版最多一个待完成表单。表单暂停期间插问须知，创建另一个只读工作流，保留原运行和草稿；回答后提示继续。明确继续才恢复原流程。无法区分补字段、修改、取消和新问题时追问，不将所有消息直接传给 resume。
 
-每个会话同时只执行一个改写状态的运行，使用数据库租约及唯一约束。恢复前取得执行权并核验归属、运行状态、interrupt ID、草稿版本；重复恢复请求去重。API 启动扫描租约过期的运行，按检查点恢复。暂停的表单不占执行租约；取消停止后续调度，已提交业务不可假装撤回。
+已实现：每个会话最多一个queued/running任务；后台扫描过期租约并按检查点恢复，最多3次领取，qa-v1图版本；120秒租约、20秒续期、270秒单次总时限。状态写入受租约令牌保护；同run检查点另有advisory lock；助手消息及答案/终态事件同事务提交。取消先保存终态，后台在续租/事件边界发现失效并中止，不能撤回已发出的模型请求。表单阶段将另行增加interrupt ID、草稿版本和恢复请求去重；不能把当前只读任务恢复等同于表单恢复。
 
 ## API 和 SSE
 
-已实现的拍卖目录GET接口见 [目录接口文档](auction-catalog.md)，包括auction-events、auction-sessions的列表和详情，以及auction-recommendations。只读公开演示数据，不需要匿名会话。会话接口见 [会话模块](conversations.md)；下表run/SSE及health/ready仍是后续设计。
+已实现的拍卖目录GET接口见 [目录接口文档](auction-catalog.md)，只读公开演示数据不需要匿名会话。会话接口见 [会话模块](conversations.md)，运行及SSE见 [工作流模块](knowledge-workflow.md)。下表resume与health/ready仍是后续设计。
 
 | 方法及路径 | 行为 |
 | --- | --- |
@@ -120,16 +120,17 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 | `POST /api/conversations`、`GET /api/conversations` | 创建及列出自己的会话 |
 | `GET /api/conversations/:id` | 获取自己的会话详情 |
 | `GET /api/conversations/:id/messages` | 分页读取自己的历史 |
-| `POST /api/conversations/:id/messages` | 当前接收clientMessageId、文本，持久化返回201或重试200、processing=not_configured；202/runId在工作流阶段实施 |
+| `POST /api/conversations/:id/messages` | 保存消息与运行返回202/runId；幂等重试返回200，同会话已有活动运行则409；旧存档不自动补跑 |
+| `GET /api/conversations/:id/runs` | 最近20个运行，活动任务优先 |
 | `GET /api/runs/:id/events` | SSE，支持 Last-Event-ID 及 after 游标 |
-| `GET /api/runs/:id` | 状态、草稿与最后事件序号 |
+| `GET /api/runs/:id` | 状态、固定错误文案与最后事件序号，当前没有表单草稿 |
 | `POST /api/runs/:id/resume` | 请求 ID、interrupt ID、草稿版本和输入 |
 | `POST /api/runs/:id/cancel` | 停止后续执行 |
 | `GET /health/live`、`GET /health/ready` | 存活、数据库及必需配置准备状态 |
 
 Vite 代理 `/api`，cookie/SSE 同源。cookie 由服务端签发，HttpOnly、SameSite=Lax，写接口校验 Origin；开发监听 loopback。所有会话、事件、草稿、恢复和提交入口验证归属。匿名 cookie 仅适合单机演示，不代表正式用户身份；前端传 userId 不能改变归属。
 
-事件含 id、runId、seq、type、时间和载荷，类型包括 `run.started`、`task.started`、`answer.delta`、`source`、`form.updated`、`run.waiting_input`、`run.completed`、`run.failed`。重要事件先保存再发送；文本增量批量保存，最终回答另存消息。前端序号去重，断线补发；游标过期则重取消息和状态。约 15 秒心跳；浏览器断线不自动取消后台运行。
+当前事件含id、runId、seq、type、message、taskId、时间，类型包含run.started、plan.ready、task.started/completed、answer.delta、source及completed/failed/cancelled。答案验证完成后，助手消息和answer.delta/source/终态事件一次事务保存；answer.delta不是逐token流。前端序号去重，断线按游标补发，约15秒心跳；断线不取消后台运行。form.updated/run.waiting_input属于后续表单设计。
 
 ## RAGFlow 检索与重排
 
