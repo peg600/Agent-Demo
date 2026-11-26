@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export * from './auctions.js';
 
 export const liveHealthSchema = z.object({
   status: z.literal('ok'),

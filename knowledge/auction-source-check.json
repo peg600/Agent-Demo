@@ -1,0 +1,9 @@
+{
+  "sourceUrl": "https://www.cguardian.com/auctions/auction-preview",
+  "checkedOn": "2026-11-27",
+  "timezone": "Asia/Shanghai",
+  "verificationStatus": "schedule_not_extracted",
+  "verifiedFacts": [],
+  "usage": "官网结构参考；演示拍卖会与拍场完全虚构",
+  "limitations": "日程页为客户端渲染，HTTP正文未含具体日程，浏览器读取未成功；第三方搜索结果未当成官网确认事实。"
+}
