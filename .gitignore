@@ -1,0 +1,30 @@
+# 本地凭据
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# 依赖、构建和测试输出
+node_modules/
+.next/
+.vite/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# 开发机上的数据、备份和日志
+/.local/
+/backups/
+/volumes/
+*.dump
+*.log
+
+# 操作系统临时文件
+.DS_Store
+Thumbs.db
+Desktop.ini
