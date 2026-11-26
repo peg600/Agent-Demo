@@ -3,12 +3,13 @@ An AI Customer Support Agent Demo
 
 嘉德智能客服 Agent 的 Windows 本地演示项目，目标包括参拍须知问答、拍场查询推荐、对话表单、多问题拆解及中断恢复。业务使用虚构资料，不连接真实拍卖生产系统。
 
-技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有开发方案、基础设施配置，以及拍卖会/拍场的演示数据、数据库迁移、查询推荐API和Vue页面；完整客服Agent尚未实现，目录尚待数据库联调。
+技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有基础设施、拍卖目录，以及匿名会话和历史消息的前后端代码与迁移；完整客服Agent尚未实现，数据库与浏览器联调仍待执行。
 
 ## 开发入口
 
 - [前后端开发环境](docs/development-toolchain.md)：依赖、启动、构建、检查和测试命令。
 - [拍卖会与拍场模块](docs/auction-catalog.md)：演示目录、数据初始化、接口与页面。
+- [会话与历史消息](docs/conversations.md)：匿名身份、会话列表、消息保存和分页历史；入口 `/chat`，智能回复尚未接入。
 - [架构与接口](docs/architecture.md)：服务分工、工作流、数据一致性和恢复方案。
 - [本地启动手册](docs/local-development.md)：Docker、端口、密钥、RAGFlow 和 Langfuse 准备步骤。
 - [Docker 配置与 G 盘数据](docs/docker-local.md)：统一 Compose 入口、端口、绑定目录和启动命令。
@@ -26,7 +27,7 @@ An AI Customer Support Agent Demo
 | `apps/web/` | 客服对话页面 |
 | `apps/api/` | 服务端接口、工作流和业务工具 |
 | `apps/api/src/db/` | 业务表定义和数据库访问代码 |
-| `apps/api/drizzle/` | 预留的数据库迁移目录 |
+| `apps/api/drizzle/` | 拍卖目录及会话消息的数据库迁移 |
 | `knowledge/` | 可公开的演示须知和知识库素材 |
 | `infra/` | 本地依赖服务的配置 |
 | `docs/` | 架构、决策、当前任务和实施结果 |

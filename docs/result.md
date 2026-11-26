@@ -1,40 +1,41 @@
-# 拍卖会与拍场实施结果
+# 会话与历史消息实施结果
 
-TASK-006 r1，待验收，2026-11-27。用户授权分模块实现并提交，完整环境联调可暂缓。对应架构版本6、DEC-007。
+TASK-007 r1，待验收，2026-11-27。对应DEC-008、架构版本7。上一轮TASK-006任务和结果已归档到 `history/TASK-006/r1-01-*`，保留原待验收状态。
 
-## 提交与实际修改
+## 推送与模块提交
+
+开始本轮实现前已执行 `git push origin main`，此前提交成功推送到远程 `1ed21fa`。本轮新增代码按模块本地提交，尚未推送：
 
 | 提交 | 内容 |
 | --- | --- |
-| 0945976 | 保存此前工程、开发依赖、Docker与文档修改 |
-| 69274ab | 共享Zod目录契约、3场拍卖会/12个拍场的演示种子、来源核查记录 |
-| ff12ac3 | PostgreSQL两表及生成迁移、事务幂等种子、只读目录接口和规则推荐、根数据库命令 |
-| 30a01b4 | Vue列表/详情/筛选/推荐页面、公共组件、请求状态处理、健康页迁到/setup |
+| f70dc32 | 共享会话契约、任务归档及DEC-008 |
+| 2100f67 | 匿名身份与会话历史后端、迁移、10项注入测试 |
+| ad92430 | 会话与历史消息前端页面 |
 
-最后的交接提交包含此文档、架构/启动说明同步和Drizzle生成JSON格式整理；完整历史以git log为准。均为本地提交，未push。
+最后交接提交包含本文档、架构、模块说明和任务状态，完整记录以git log为准。
 
-数据与契约位于 packages/contracts/src/auctions.ts、apps/api/src/db/seeds/catalog.ts；官网来源核查见 knowledge/auction-sources.md。官网日程为动态页面，本次未提取具体场次；所有演示名称、日期、地址和数量都是虚构，不宣称已取得官网实时数据。
+## 实际修改
 
-后端位于 apps/api/src/db、repositories/auction-repository.ts、routes/auctions.ts。提供拍卖会/拍场列表与详情、分页筛选、北京时间开拍日期范围和确定性规则推荐。只读查询限定isDemo记录；参数化SQL和LIKE转义；列表与计数在重复读事务内保持一致。无模型调用或内存自动降级，缺库返回503。
+- `packages/contracts/src/conversations.ts`：访客会话、会话创建/列表/详情、消息保存/分页的Zod契约；客户端请求ID与重复响应标识。
+- `apps/api/src/db/schema.ts` 与 `apps/api/drizzle/0001_conversation_history.sql`：visitors、visitor_sessions、conversations、messages四张表，以及外键、幂等键、消息序号约束与索引；生成迁移但未执行。
+- `apps/api/src/repositories/conversation-repository.ts`：身份过期检查、归属查询、事务内幂等创建、锁会话分配序号、消息计数更新、历史游标及会话列表分页。
+- `apps/api/src/routes/conversations.ts` 与 `app.ts`：匿名HttpOnly cookie、随机令牌HMAC摘要、固定30天有效期、Origin检查、身份创建限速、输入/输出校验、固定错误文案及惰性数据库访问。
+- `apps/web/src/composables/useConversations.ts`、`views/ChatView.vue`、`App.vue`、`router.ts`：客服入口、身份建立与失效提示、历史列表、新会话、消息保存、加载更早历史；请求超时、取消、重试ID保留和旧响应隔离。
+- README及架构、开发手册、实施计划同步；新增 `docs/conversations.md` 说明接口、配置和后续验证。
 
-Drizzle生成app.auction_events/app.auctions的迁移，含外键、时间顺序、类别与数量约束及索引。种子先校验唯一ID、关联与日程，事务中按固定ID更新演示记录，遇到非演示同ID记录拒绝覆盖，不清空其他数据。
-
-前端实现拍卖会列表、拍场目录、双方详情与关联导航、推荐理由；请求有Zod校验、15秒超时、旧请求取消、加载/空/错误重试状态。页面始终展示演示标识，时间以Asia/Shanghai显示，没有虚构的交易或预约按钮。详情官网链接仅为参考入口。现有健康检查e2e用例只更新到/setup。
+消息只保存为user角色，返回 `processing=not_configured`；前端明确说明智能回复尚未接入。没有创建假的助手回答、工作流运行、SSE或自动表单。匿名身份过期、清除cookie或更换SESSION_SECRET后，当前没有旧身份找回机制。草稿与失败重试ID仅保留在客服组件内存中，刷新或离开模块会丢弃；此时应先查历史确认上一次保存结果。
 
 ## 验证证据
 
-- corepack pnpm lint：通过，无错误/警告。统一Prettier负责3个额外Vue格式规则，语义检查保留。
-- corepack pnpm typecheck：通过，contracts/API/Web三个workspace。
-- corepack pnpm build：通过，前后端生产构建完成，Web146模块。
-- corepack pnpm format:check：初次发现Drizzle两个生成JSON格式问题；格式化后再次通过。
-- git diff --check、文档相对链接检查：通过。
-- 独立只读审查：未发现阻止提交的问题；核对参数化查询、演示边界、时区、种子事务、迁移一致、错误脱敏和前端取消逻辑。
-- 真实.env、data、vendor、node_modules不进入提交；没有修改系统或仓库Git身份设置，提交仅复用历史作者作为单条命令参数。
+- `corepack pnpm typecheck`：三个workspace通过。
+- `corepack pnpm lint`：通过。
+- `corepack pnpm test`：3个测试文件、17项测试通过；其中10项新增会话测试覆盖配置边界、cookie与HMAC、复用/过期、Origin、访问者隔离、幂等、非法角色/归属字段、历史分页、错误脱敏与初始化限速。测试仓储为内存替身，没有自动回退到演示内存库的业务代码。
+- `corepack pnpm build`：API与Web生产构建通过，Web共151个模块。
+- `corepack pnpm format:check`：首次发现两处源码格式，修正后通过。
+- `git diff --check`：通过。独立安全审查未发现本地演示范围内的阻塞问题；核对SQL参数化、事务归属、行锁/唯一约束、迁移一致性、cookie/日志和前端取消/重试逻辑。
 
-## 未运行与剩余工作
+## 尚未执行
 
-按用户要求暂缓完整环境跑通。本轮未执行Vitest、Playwright、数据库迁移/种子、Docker服务启动、模型调用或真实数据库HTTP联调。源码审查和构建不替代运行验收。已有数据库需后续按docs/auction-catalog.md应用迁移、播种并验证页面/接口。
+遵循用户本轮范围，没有启动Docker服务、执行数据库迁移或种子、连接真实PostgreSQL、调用模型/RAGFlow/Langfuse、运行浏览器联调。注入测试使用测试仓储，不能证明真实数据库并发、事务或持久化行为已通过。后续应按 `docs/conversations.md` 验证两名访客隔离、跨刷新历史、消息分页和网络重试。
 
-本轮完成用户确认的拍卖会/拍场模块，不含完整客服Agent、会话历史、RAG问答、SSE、表单、中断恢复、Langfuse追踪或生产鉴权。固定日程会随实际时间过期，届时推荐为空是预期，不自动将历史数据伪装成进行中。
-
-TASK-005原记录已归档到history/TASK-005/r1-01-*，未擅自改为已验收。新任务状态为待验收，未宣称Work已收到同步。
+没有修改Git全局或仓库身份设置，没有提交本地.env或data。未向Work执行独立同步，不宣称Work已收到交接。

@@ -1,16 +1,16 @@
 # 嘉德智能客服 Agent 本地架构
 
-文档版本：6。更新日期：2026-11-27。关联 DEC-001 至 DEC-007、TASK-006 r1。
+文档版本：7。更新日期：2026-11-27。关联 DEC-001 至 DEC-008、TASK-007 r1。
 
 按用户提供的中国嘉德智能客服场景，建设可在个人 Windows 电脑演示、调试和验收的系统，覆盖 FDE 的需求拆解、系统集成、Agent 编排及交付说明。以下为实现目标，不表示已接入中国嘉德生产系统或已完成所述项目经历。
 
 ## 当前实现与设计边界
 
-已有协作文档、环境模板、根 Compose、PostgreSQL/RAGFlow 本地配置、Langfuse 覆盖配置及准备脚本。TASK-006 已实现拍卖会/拍场的共享契约、3场拍卖会及12个拍场的虚构种子、Drizzle表及迁移、只读查询/详情/筛选/规则推荐API、Vue列表和详情页面。代码已通过类型与构建检查，但未执行数据库迁移、种子或浏览器联调。PG/RAGFlow数据配置绑定项目data/，本轮未启动业务容器。客服对话、身份识别、表单、工作流和模型/检索服务集成仍待实现。见 [拍卖目录模块](auction-catalog.md)、[前后端开发环境](development-toolchain.md)、[Docker配置](docker-local.md)，实际验证状态见result.md。
+已有协作文档、环境模板、根 Compose、PostgreSQL/RAGFlow 本地配置、Langfuse 覆盖配置及准备脚本。TASK-006 已实现拍卖会/拍场的共享契约、3场拍卖会及12个拍场的虚构种子、Drizzle表及迁移、只读查询/详情/筛选/规则推荐API、Vue列表和详情页面。TASK-007增加匿名身份、会话归属、会话列表与详情、幂等保存用户消息及历史分页的前后端代码。数据库迁移、种子与浏览器联调尚未执行；PG/RAGFlow数据配置绑定项目data/，本轮未启动业务容器。助手回复、SSE、表单、工作流和模型/检索服务集成仍待实现。见 [会话模块](conversations.md)、[拍卖目录模块](auction-catalog.md)、[前后端开发环境](development-toolchain.md)、[Docker配置](docker-local.md)，实际验证状态见result.md。
 
 用户指定 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker。数据库和 RAGFlow 运行在 Docker Desktop；前后端和自有容器配置集中在本仓库。模型通过 OpenAI API 调用，密钥稍后配置。
 
-工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright。Drizzle目前管理app.auction_events与app.auctions，运行表和其余业务表仍待实现。目录仓储使用pg参数化查询与只读重复读事务，不需要模型密钥；数据库不可用返回503。初版Agent仍计划单API进程与持久化运行表，不增加独立调度队列或多Agent自主协作。
+工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright。Drizzle目前管理app.auction_events、app.auctions及visitors、visitor_sessions、conversations、messages，运行表和其余业务表仍待实现。仓储使用pg参数化查询与事务，不需要模型密钥；数据库不可用返回503。初版Agent仍计划单API进程与持久化运行表，不增加独立调度队列或多Agent自主协作。
 
 ## 本地拓扑
 
@@ -84,9 +84,9 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 
 | 表 | 字段和约束重点 |
 | --- | --- |
-| `visitors`、`visitor_sessions` | 服务端访问者、令牌摘要、过期时间 |
-| `conversations` | `id`、`owner_id`、标题、时间 |
-| `messages` | 会话、角色、内容、引用；用户请求按同会话 client_message_id 去重，最终回答按 run_id/output_kind 唯一 |
+| `visitors`、`visitor_sessions`（已定义） | 服务端访问者、令牌HMAC摘要、固定30天过期时间 |
+| `conversations`（已定义） | `id`、`visitor_id`归属、标题、时间、消息数量、下一消息序号；同访客client_conversation_id唯一 |
+| `messages`（已定义） | 会话、角色、内容、序号；同会话client_message_id及sequence唯一。引用与run_id/output_kind在工作流阶段增加 |
 | `workflow_runs` | 归属会话、状态、图版本、租约、错误；运行 ID 即 graph thread ID |
 | `run_events` | 事件及载荷；`(run_id, seq)` 唯一 |
 | `form_drafts` | 归属、结构化字段、缺项、版本、确认版本、状态 |
@@ -112,14 +112,15 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 
 ## API 和 SSE
 
-已实现的拍卖目录GET接口见 [目录接口文档](auction-catalog.md)，包括auction-events、auction-sessions的列表和详情，以及auction-recommendations。只读公开演示数据，不需要匿名会话。以下会话/SSE/表单接口仍是后续设计，`/health/live`除外。
+已实现的拍卖目录GET接口见 [目录接口文档](auction-catalog.md)，包括auction-events、auction-sessions的列表和详情，以及auction-recommendations。只读公开演示数据，不需要匿名会话。会话接口见 [会话模块](conversations.md)；下表run/SSE及health/ready仍是后续设计。
 
 | 方法及路径 | 行为 |
 | --- | --- |
 | `POST /api/visitor-session` | 本地匿名访问者，设置 HttpOnly cookie |
 | `POST /api/conversations`、`GET /api/conversations` | 创建及列出自己的会话 |
+| `GET /api/conversations/:id` | 获取自己的会话详情 |
 | `GET /api/conversations/:id/messages` | 分页读取自己的历史 |
-| `POST /api/conversations/:id/messages` | 接收 clientMessageId、文本，持久化后返回 202 与 runId |
+| `POST /api/conversations/:id/messages` | 当前接收clientMessageId、文本，持久化返回201或重试200、processing=not_configured；202/runId在工作流阶段实施 |
 | `GET /api/runs/:id/events` | SSE，支持 Last-Event-ID 及 after 游标 |
 | `GET /api/runs/:id` | 状态、草稿与最后事件序号 |
 | `POST /api/runs/:id/resume` | 请求 ID、interrupt ID、草稿版本和输入 |

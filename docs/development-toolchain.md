@@ -1,6 +1,6 @@
 # 前后端基础开发环境
 
-基础库由TASK-003 r1准备。TASK-006已添加拍卖目录前后端与两张表的迁移，使用方法见 [拍卖目录](auction-catalog.md)；完整客服、会话、表单及模型调用仍待实现。
+基础库由TASK-003 r1准备。TASK-006已添加拍卖目录，TASK-007增加匿名会话和历史消息前后端及四张表的迁移。使用方法见 [拍卖目录](auction-catalog.md) 和 [会话模块](conversations.md)；助手回答、表单、工作流及模型调用仍待实现。
 
 ## Workspace
 
@@ -47,9 +47,9 @@ Playwright 使用 Chromium，在独立的 3101/5174 端口启动测试服务，�
 
 API 从仓库根 `.env` 读取配置，与执行命令时的工作目录无关。现有进程环境优先，测试端口不会被 `.env` 覆盖。基础 API 即使没有 OpenAI Key 或数据库连接也可启动，只代表进程存活，不代表下游依赖就绪；尚未实现 `/health/ready`。
 
-API 监听限制为 loopback；当前没有身份认证，不能把这个骨架暴露到局域网。Vite 仅读取 API_HOST/API_PORT/WEB_PORT 配置代理，不向浏览器注入服务端 API Key。对外部服务的 SDK 当前只是已准备的依赖，后续任务才注册和调用。
+API 监听限制为 loopback；当前只有本地匿名cookie归属校验，没有正式账号认证。Vite 仅读取 API_HOST/API_PORT/WEB_PORT 配置代理，不向浏览器注入服务端 API Key。会话写入要求WEB_ORIGIN与浏览器源一致，SESSION_SECRET至少32字符。对外部服务的 SDK 当前只是已准备的依赖，后续任务才注册和调用。
 
-Drizzle已定义拍卖会/拍场表并生成迁移。根命令 `pnpm db:generate` 生成后续迁移、`pnpm db:migrate` 应用迁移、`pnpm db:seed` 导入演示目录；后两条会写数据库，TASK-006尚未执行。健康检查页面为 `/setup`，首页目录需要数据库就绪。
+Drizzle已定义拍卖会/拍场及访客/会话/消息表并生成迁移。根命令 `pnpm db:generate` 生成后续迁移、`pnpm db:migrate` 应用迁移、`pnpm db:seed` 导入演示目录；后两条会写数据库，尚未执行。健康检查页面为 `/setup`，首页目录与 `/chat` 会话均需要数据库就绪。
 
 ## 安装行为
 

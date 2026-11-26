@@ -1,6 +1,6 @@
 # 嘉德客服本地开发与启动手册
 
-本手册从项目根目录 `G:\Agent-Demo` 使用 PowerShell 7。当前已有基础工程、Docker配置及拍卖目录前后端，完整客服功能尚未实现，目录真实数据库联调待执行。前后端依赖与现有命令见 [开发环境](development-toolchain.md)，下文保留 Docker 准备和后续业务实施步骤。
+本手册从项目根目录 `G:\Agent-Demo` 使用 PowerShell 7。当前已有基础工程、Docker配置、拍卖目录及会话历史前后端，完整客服功能尚未实现，真实数据库与浏览器联调待执行。前后端依赖与现有命令见 [开发环境](development-toolchain.md)，下文保留 Docker 准备和后续业务实施步骤。
 
 ## 机器与资源安排
 
@@ -112,7 +112,7 @@ Invoke-RestMethod http://127.0.0.1:3000/api/public/health
 
 ## 前后端与后续业务命令
 
-当前已有 install、dev、build、typecheck、lint、test、test:e2e，以及目录的 db:generate/db:migrate/db:seed。迁移和种子属于写库操作，本轮未执行；具体初始化见 [拍卖目录模块](auction-catalog.md)。评估命令 eval:smoke、会话迁移及 PostgresSaver.setup 仍待后续实现。
+当前已有 install、dev、build、typecheck、lint、test、test:e2e，以及 db:generate/db:migrate/db:seed。目录和会话迁移已生成；迁移和种子属于写库操作，本轮未执行，具体初始化见 [拍卖目录模块](auction-catalog.md) 与 [会话模块](conversations.md)。评估命令 eval:smoke及 PostgresSaver.setup 仍待后续实现。
 
 使用 frozen-lockfile 安装依赖；Vite已代理 /api，SSE业务本身仍未实现。后续SSE代理不得缓存或缓冲事件。
 
