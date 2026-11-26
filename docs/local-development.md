@@ -1,6 +1,6 @@
 # 嘉德客服本地开发与启动手册
 
-本手册从项目根目录 `G:\Agent-Demo` 使用 PowerShell 7。当前已有基础前后端工程与基础设施准备配置，业务功能尚未实现。前后端依赖与现有命令见 [开发环境](development-toolchain.md)，下文保留 Docker 准备和后续业务实施步骤。
+本手册从项目根目录 `G:\Agent-Demo` 使用 PowerShell 7。当前已有基础工程、Docker配置及拍卖目录前后端，完整客服功能尚未实现，目录真实数据库联调待执行。前后端依赖与现有命令见 [开发环境](development-toolchain.md)，下文保留 Docker 准备和后续业务实施步骤。
 
 ## 机器与资源安排
 
@@ -64,7 +64,7 @@ Invoke-RestMethod http://127.0.0.1:8080/api/v1/system/healthz
 
 以上为后续启动命令，本轮尚未执行。Compose 配置通过不能替代服务就绪验收。全新克隆先按 Docker 配置文档运行 prepare-data、prepare-upstream 和 init-local-env；已有文件不要重复初始化。
 
-业务数据库中尚无业务表。gard_dev 仅供本地开发，生产应分离迁移与运行账号。RAGFlow 的业务元数据仍由其 MySQL 管理，不能用本项目 PostgreSQL 替代。
+拍卖目录的两张表及迁移已生成，但尚未执行入库；后续初始化参见 [拍卖目录模块](auction-catalog.md)。gard_dev 仅供本地开发，生产应分离迁移与运行账号。RAGFlow 的业务元数据仍由其 MySQL 管理，当前MySQL配置不能直接删除它；改用PostgreSQL需另行验证对应后端及迁移兼容性。
 
 打开 RAGFlow，创建演示知识库及 API token；管理员初始密码由脚本写在本地 infra/ragflow/.env 的 ADMIN_DEFAULT_PASSWORD 中，勿将其贴入聊天或提交 Git。先在模型设置中配置 OpenAI Embedding 模型和 API Key，再创建及解析数据集。根 `.env` 不会自动同步到 RAGFlow 管理界面。
 
@@ -112,15 +112,9 @@ Invoke-RestMethod http://127.0.0.1:3000/api/public/health
 
 ## 前后端与后续业务命令
 
-当前基础工程已配置 install、dev、build、typecheck、lint、test 和 test:e2e。下面的业务脚本契约仍须在后续 M1/M5 落实，尚不能当作已完成的命令使用：
+当前已有 install、dev、build、typecheck、lint、test、test:e2e，以及目录的 db:generate/db:migrate/db:seed。迁移和种子属于写库操作，本轮未执行；具体初始化见 [拍卖目录模块](auction-catalog.md)。评估命令 eval:smoke、会话迁移及 PostgresSaver.setup 仍待后续实现。
 
-```text
-pnpm db:migrate
-pnpm db:seed
-pnpm eval:smoke
-```
-
-依赖锁文件由首次安装生成，之后使用 frozen-lockfile。API 包已有 Drizzle 配置与包级 db:generate/db:migrate 入口，但没有业务表和迁移，不能替代上面的完整初始化任务。后续统一迁移命令分别管理业务表和 PostgresSaver.setup；seed 必须可重复执行且只写虚构拍场。Vite 代理 SSE 时不得缓存或缓冲事件。
+使用 frozen-lockfile 安装依赖；Vite已代理 /api，SSE业务本身仍未实现。后续SSE代理不得缓存或缓冲事件。
 
 宿主进程通过 `127.0.0.1:5433/8080/3000` 访问容器。将来 API 容器化时，业务 PG 用 Compose 服务名，其他独立栈通过明确配置的网络或 `host.docker.internal`，不能继续把容器中的 localhost 当宿主机。
 

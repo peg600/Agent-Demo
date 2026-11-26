@@ -255,12 +255,8 @@
           "tableFrom": "auctions",
           "tableTo": "auction_events",
           "schemaTo": "app",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }

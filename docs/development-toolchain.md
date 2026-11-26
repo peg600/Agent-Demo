@@ -1,6 +1,6 @@
 # 前后端基础开发环境
 
-本轮为 TASK-003 r1：安装和配置基础库，提供能单独运行的前端页面及 Fastify 存活检查。当前还没有客服、会话、表单、数据库表和模型调用功能。
+基础库由TASK-003 r1准备。TASK-006已添加拍卖目录前后端与两张表的迁移，使用方法见 [拍卖目录](auction-catalog.md)；完整客服、会话、表单及模型调用仍待实现。
 
 ## Workspace
 
@@ -49,7 +49,7 @@ API 从仓库根 `.env` 读取配置，与执行命令时的工作目录无关�
 
 API 监听限制为 loopback；当前没有身份认证，不能把这个骨架暴露到局域网。Vite 仅读取 API_HOST/API_PORT/WEB_PORT 配置代理，不向浏览器注入服务端 API Key。对外部服务的 SDK 当前只是已准备的依赖，后续任务才注册和调用。
 
-Drizzle 已配置业务 schema 路径和迁移输出目录；尚无业务表或可应用的迁移。以后增加表后，使用 `pnpm --filter @gard/api db:generate` 生成迁移，审查 SQL 后再运行 `db:migrate`。本轮不执行数据库迁移。
+Drizzle已定义拍卖会/拍场表并生成迁移。根命令 `pnpm db:generate` 生成后续迁移、`pnpm db:migrate` 应用迁移、`pnpm db:seed` 导入演示目录；后两条会写数据库，TASK-006尚未执行。健康检查页面为 `/setup`，首页目录需要数据库就绪。
 
 ## 安装行为
 

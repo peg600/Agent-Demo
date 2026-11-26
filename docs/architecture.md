@@ -1,16 +1,16 @@
 # 嘉德智能客服 Agent 本地架构
 
-文档版本：5。更新日期：2026-11-26。关联 DEC-001 至 DEC-006、TASK-005 r1。
+文档版本：6。更新日期：2026-11-27。关联 DEC-001 至 DEC-007、TASK-006 r1。
 
 按用户提供的中国嘉德智能客服场景，建设可在个人 Windows 电脑演示、调试和验收的系统，覆盖 FDE 的需求拆解、系统集成、Agent 编排及交付说明。以下为实现目标，不表示已接入中国嘉德生产系统或已完成所述项目经历。
 
 ## 当前实现与设计边界
 
-已有协作文档、环境模板、根 Compose、业务 PostgreSQL/RAGFlow 本地配置、Langfuse 覆盖配置及准备脚本；已具备 pnpm workspace、Vue/Vite 基础页面、Vue Router/Pinia 注册、Fastify `/health/live`、共享契约及工程检查配置。Docker 引擎可用；TASK-005 将 PG/RAGFlow 持久数据绑定到项目 `data/`，配置及目录检查通过，但尚未启动业务容器。客服业务、身份识别、数据库表/迁移和外部服务集成尚未实现。依赖及启动说明见 [前后端开发环境](development-toolchain.md)、[Docker 配置](docker-local.md)，验证状态见 result.md。
+已有协作文档、环境模板、根 Compose、PostgreSQL/RAGFlow 本地配置、Langfuse 覆盖配置及准备脚本。TASK-006 已实现拍卖会/拍场的共享契约、3场拍卖会及12个拍场的虚构种子、Drizzle表及迁移、只读查询/详情/筛选/规则推荐API、Vue列表和详情页面。代码已通过类型与构建检查，但未执行数据库迁移、种子或浏览器联调。PG/RAGFlow数据配置绑定项目data/，本轮未启动业务容器。客服对话、身份识别、表单、工作流和模型/检索服务集成仍待实现。见 [拍卖目录模块](auction-catalog.md)、[前后端开发环境](development-toolchain.md)、[Docker配置](docker-local.md)，实际验证状态见result.md。
 
 用户指定 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker。数据库和 RAGFlow 运行在 Docker Desktop；前后端和自有容器配置集中在本仓库。模型通过 OpenAI API 调用，密钥稍后配置。
 
-工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright，TASK-003 已开始将相应基础配置落地。Drizzle 当前只有 schema 配置，运行表和所有业务表仍待实现。初版方案保持单 API 进程与持久化运行表，不增加独立消息队列或多 Agent 自主协作。
+工程采用 Vue 3 + Vite、pnpm workspace、Zod、Drizzle、Vitest 和 Playwright。Drizzle目前管理app.auction_events与app.auctions，运行表和其余业务表仍待实现。目录仓储使用pg参数化查询与只读重复读事务，不需要模型密钥；数据库不可用返回503。初版Agent仍计划单API进程与持久化运行表，不增加独立调度队列或多Agent自主协作。
 
 ## 本地拓扑
 
@@ -92,7 +92,8 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 | `form_drafts` | 归属、结构化字段、缺项、版本、确认版本、状态 |
 | `consultations` | `draft_id` 唯一、回执、提交时间 |
 | `idempotency_requests` | 归属、操作、稳定 key、请求摘要、完整结果；唯一约束 |
-| `auctions` | 虚构场次、类别、地点、起止时间、状态、更新时间 |
+| `auction_events`（已定义） | 演示拍卖会、城市、场馆、地址、预展/拍卖起止时间、来源说明 |
+| `auctions`（已定义） | 演示拍场、event_id外键、类别、厅名、起止时间、拍品数；状态按查询时间计算 |
 | `knowledge_sources` | 文档 ID、来源 URL、标题、版本、生效/失效时间和审核状态 |
 
 时间存 UTC、显示 Asia/Shanghai；“下周”先转换成明确日期范围，不足则追问。
@@ -110,6 +111,8 @@ RAGFlow 默认 CPU 路径附带 Elasticsearch、MySQL、对象存储、Kvrocks �
 每个会话同时只执行一个改写状态的运行，使用数据库租约及唯一约束。恢复前取得执行权并核验归属、运行状态、interrupt ID、草稿版本；重复恢复请求去重。API 启动扫描租约过期的运行，按检查点恢复。暂停的表单不占执行租约；取消停止后续调度，已提交业务不可假装撤回。
 
 ## API 和 SSE
+
+已实现的拍卖目录GET接口见 [目录接口文档](auction-catalog.md)，包括auction-events、auction-sessions的列表和详情，以及auction-recommendations。只读公开演示数据，不需要匿名会话。以下会话/SSE/表单接口仍是后续设计，`/health/live`除外。
 
 | 方法及路径 | 行为 |
 | --- | --- |

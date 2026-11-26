@@ -3,11 +3,12 @@ An AI Customer Support Agent Demo
 
 嘉德智能客服 Agent 的 Windows 本地演示项目，目标包括参拍须知问答、拍场查询推荐、对话表单、多问题拆解及中断恢复。业务使用虚构资料，不连接真实拍卖生产系统。
 
-技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有开发方案、基础设施配置，以及 Vue/Vite 和 Fastify 最小开发入口；客服业务代码尚未实现。
+技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有开发方案、基础设施配置，以及拍卖会/拍场的演示数据、数据库迁移、查询推荐API和Vue页面；完整客服Agent尚未实现，目录尚待数据库联调。
 
 ## 开发入口
 
 - [前后端开发环境](docs/development-toolchain.md)：依赖、启动、构建、检查和测试命令。
+- [拍卖会与拍场模块](docs/auction-catalog.md)：演示目录、数据初始化、接口与页面。
 - [架构与接口](docs/architecture.md)：服务分工、工作流、数据一致性和恢复方案。
 - [本地启动手册](docs/local-development.md)：Docker、端口、密钥、RAGFlow 和 Langfuse 准备步骤。
 - [Docker 配置与 G 盘数据](docs/docker-local.md)：统一 Compose 入口、端口、绑定目录和启动命令。
@@ -16,7 +17,7 @@ An AI Customer Support Agent Demo
 
 数据库和 RAGFlow 在 Docker Desktop，前后端先在宿主机热更新；PostgreSQL/RAGFlow 数据绑定到本项目 `data/`，整个数据目录不提交 Git。根 `compose.yaml` 管理启动配置；当前尚未启动业务容器。
 
-基础前后端可以独立于 Docker 启动：在项目根目录执行 `pnpm dev`，访问 `http://127.0.0.1:5173`；运行 `pnpm check` 检查基础工程。实际依赖安装与验证结果见 [实施结果](docs/result.md)。
+基础前后端可以独立于 Docker 启动：在项目根目录执行 `pnpm dev`，访问 `http://127.0.0.1:5173/setup` 检查连接。首页拍卖目录需要业务PostgreSQL，并先执行 `pnpm db:migrate` 和 `pnpm db:seed`；这些写库步骤本轮未执行。实际验证结果见 [实施结果](docs/result.md)。
 
 ## 项目目录
 
