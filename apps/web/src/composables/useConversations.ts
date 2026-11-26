@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useWorkflow } from './useWorkflow.js';
 import {
   conversationDetailResponseSchema,
   conversationIdSchema,
@@ -13,14 +14,19 @@ import {
 } from '@gard/contracts';
 
 class ChatRequestError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    code?: string,
+  ) {
     super(
       status === 401
         ? '匿名身份尚未建立或已失效，请明确建立身份后继续。'
         : status === 404
           ? '找不到此会话，或当前匿名身份无权访问。'
           : status === 409
-            ? '重试内容与已保存内容不一致，请刷新历史后再试。'
+            ? code === 'RUN_ACTIVE'
+              ? '当前会话仍在处理上一条消息，请等待完成或取消后再发送。'
+              : '重试内容与已保存内容不一致，请刷新历史后再试。'
             : status === 503
               ? '会话服务暂不可用，请稍后重试。'
               : '请求未能完成，请稍后重试。',
@@ -63,9 +69,11 @@ export function useConversations() {
   const sending = ref(false);
   const sendError = ref('');
   const savedNotice = ref('');
+  const historyRefreshError = ref('');
   const drafts = new Map<string, Draft>();
   const jobs = new Map<string, Job>();
   let pendingConversationId: string | null = null;
+  const workflow = useWorkflow({ onUnauthorized: clearIdentity, onTerminal: refreshHistory });
 
   function cancel(key: string) {
     const job = jobs.get(key);
@@ -110,10 +118,14 @@ export function useConversations() {
             body: JSON.stringify(body),
           }),
     });
-    if (!response.ok) throw new ChatRequestError(response.status);
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new ChatRequestError(response.status, error?.error?.code);
+    }
     return schema.parse(await response.json());
   }
   function resetDetail() {
+    workflow.reset();
     conversation.value = null;
     messages.value = [];
     beforeSequence.value = null;
@@ -125,6 +137,7 @@ export function useConversations() {
     olderError.value = '';
     sendError.value = '';
     savedNotice.value = '';
+    historyRefreshError.value = '';
   }
   function clearIdentity() {
     for (const key of jobs.keys()) cancel(key);
@@ -247,6 +260,7 @@ export function useConversations() {
       messages.value = history.data;
       beforeSequence.value = history.nextBeforeSequence;
       hasMore.value = history.hasMore;
+      void workflow.load(id);
     } catch (cause) {
       if (current('detail', job)) detailError.value = errorMessage(cause, job);
     } finally {
@@ -259,6 +273,28 @@ export function useConversations() {
     const byId = new Map(messages.value.map((message) => [message.id, message]));
     for (const message of incoming) byId.set(message.id, message);
     messages.value = [...byId.values()].sort((a, b) => a.sequence - b.sequence);
+  }
+
+  async function refreshHistory() {
+    if (!ready.value || !selectedId.value) return;
+    const id = selectedId.value;
+    const job = start('refresh');
+    historyRefreshError.value = '';
+    try {
+      const [detail, history] = await Promise.all([
+        request(`/api/conversations/${id}`, conversationDetailResponseSchema, job),
+        request(`/api/conversations/${id}/messages?limit=30`, messageListResponseSchema, job),
+      ]);
+      if (!current('refresh', job)) return;
+      conversation.value = detail.data;
+      mergeMessages(history.data);
+      // Keep the older-page cursor so a completed answer cannot discard loaded history.
+      void loadList();
+    } catch (cause) {
+      if (current('refresh', job)) historyRefreshError.value = errorMessage(cause, job);
+    } finally {
+      finish('refresh', job);
+    }
   }
 
   async function loadOlder() {
@@ -293,7 +329,14 @@ export function useConversations() {
   }
 
   async function sendMessage() {
-    if (!ready.value || !conversation.value || sending.value || detailLoading.value) return;
+    if (
+      !ready.value ||
+      !conversation.value ||
+      sending.value ||
+      detailLoading.value ||
+      workflow.busy.value
+    )
+      return;
     const content = draft.value.trim();
     if (!content || draft.value.length > 4000) return;
     const id = selectedId.value;
@@ -318,7 +361,11 @@ export function useConversations() {
       mergeMessages([result.data]);
       drafts.delete(id);
       draft.value = '';
-      savedNotice.value = '消息已保存，智能回复尚未接入';
+      savedNotice.value =
+        result.processing === 'queued'
+          ? '消息已接收，正在准备回答。'
+          : '消息已保存，此消息未关联智能回复任务。';
+      if (result.runId) void workflow.load(id, result.runId);
       void loadList();
     } catch (cause) {
       if (current('send', job)) sendError.value = errorMessage(cause, job);
@@ -329,7 +376,7 @@ export function useConversations() {
   }
 
   watch(selectedId, () => {
-    for (const key of ['detail', 'older', 'send', 'create']) cancel(key);
+    for (const key of ['detail', 'older', 'send', 'create', 'refresh']) cancel(key);
     creating.value = false;
     createError.value = '';
     resetDetail();
@@ -338,6 +385,7 @@ export function useConversations() {
   });
   onBeforeUnmount(() => {
     for (const key of jobs.keys()) cancel(key);
+    workflow.reset();
     drafts.clear();
   });
   void loadList(1);
@@ -367,6 +415,7 @@ export function useConversations() {
     sending,
     sendError,
     savedNotice,
+    historyRefreshError,
     loadList,
     establishIdentity,
     createConversation,
@@ -374,5 +423,7 @@ export function useConversations() {
     loadOlder,
     updateDraft,
     sendMessage,
+    refreshHistory,
+    workflow,
   };
 }

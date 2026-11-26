@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useConversations } from '../composables/useConversations.js';
-import { formatDate } from '../composables/useCatalogue.js';
+import { formatDate, safeSourceUrl } from '../composables/useCatalogue.js';
 
 const {
   selectedId,
@@ -28,6 +29,7 @@ const {
   sending,
   sendError,
   savedNotice,
+  historyRefreshError,
   loadList,
   establishIdentity,
   createConversation,
@@ -35,7 +37,33 @@ const {
   loadOlder,
   updateDraft,
   sendMessage,
+  refreshHistory,
+  workflow,
 } = useConversations();
+
+const {
+  run: activeRun,
+  events: runEvents,
+  partialAnswer,
+  cancelling,
+  error: workflowError,
+  connection,
+  busy: runBusy,
+  reconnect,
+  cancelRun,
+} = workflow;
+const statusLabels = {
+  queued: '等待处理',
+  running: '正在处理',
+  completed: '已完成',
+  failed: '未完成',
+  cancelled: '已取消',
+};
+const steps = computed(() =>
+  runEvents.value.filter((event) =>
+    ['plan.ready', 'task.started', 'task.completed'].includes(event.type),
+  ),
+);
 
 function onInput(event: Event) {
   updateDraft((event.target as HTMLTextAreaElement).value);
@@ -47,7 +75,7 @@ function onInput(event: Event) {
     <header class="chat-intro">
       <p class="eyebrow">嘉德智能客服 · 本地开发</p>
       <h1>客服会话</h1>
-      <p>保存咨询内容，随时回看历史。当前阶段仅保存消息，智能回复尚未接入。</p>
+      <p>查询参拍演示知识与拍场信息，查看回答来源，也可以随时回看历史。</p>
     </header>
 
     <section v-if="identityRequired" class="identity-panel" aria-labelledby="identity-heading">
@@ -117,7 +145,7 @@ function onInput(event: Event) {
       >
         <header class="message-heading">
           <h2 id="conversation-heading">{{ conversation?.title ?? '开始一段咨询' }}</h2>
-          <span class="stage-label">消息存档阶段</span>
+          <span class="stage-label">知识库问答 · 演示</span>
         </header>
         <div v-if="!selectedId" class="chat-empty">
           <h3>关于拍卖，有什么想了解的？</h3>
@@ -158,9 +186,82 @@ function onInput(event: Event) {
                 }}</time>
               </div>
               <p>{{ message.content }}</p>
+              <details v-if="message.sources.length" class="answer-sources">
+                <summary>回答来源（{{ message.sources.length }}）</summary>
+                <ol>
+                  <li v-for="source in message.sources" :key="source.id">
+                    <a
+                      v-if="safeSourceUrl(source.url)"
+                      :href="safeSourceUrl(source.url)!"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      >{{ source.title }}</a
+                    >
+                    <strong v-else>{{ source.title }}</strong>
+                    <span class="source-version">版本 {{ source.version }}</span>
+                    <p>{{ source.excerpt }}</p>
+                  </li>
+                </ol>
+              </details>
             </li>
           </ol>
+          <section
+            v-if="activeRun || workflowError || runBusy"
+            class="workflow-panel"
+            aria-label="回答处理状态"
+          >
+            <div class="workflow-heading">
+              <strong role="status">{{
+                activeRun ? statusLabels[activeRun.status] : '读取运行状态…'
+              }}</strong>
+              <button
+                v-if="activeRun && ['queued', 'running'].includes(activeRun.status)"
+                class="secondary"
+                :disabled="cancelling"
+                @click="cancelRun"
+              >
+                {{ cancelling ? '正在取消…' : '取消本次回答' }}
+              </button>
+            </div>
+            <p
+              v-if="connection === 'connecting' || connection === 'reconnecting'"
+              class="muted"
+              role="status"
+            >
+              {{ connection === 'reconnecting' ? '连接中断，正在重连…' : '正在连接执行状态…' }}
+            </p>
+            <ol v-if="steps.length" class="run-steps">
+              <li v-for="step in steps" :key="step.id">
+                {{
+                  step.message ??
+                  (step.type === 'task.completed'
+                    ? '子任务完成'
+                    : step.type === 'plan.ready'
+                      ? '问题拆解完成'
+                      : '正在处理子任务')
+                }}
+              </li>
+            </ol>
+            <p v-if="activeRun?.status === 'failed'" class="chat-error" role="alert">
+              {{ activeRun.errorMessage ?? '本次回答未能完成，请稍后重新提问。' }}
+            </p>
+            <p v-if="activeRun?.status === 'cancelled'" class="muted">
+              已取消本次回答，提问与已有历史仍保留。
+            </p>
+            <div v-if="workflowError" class="chat-error" role="alert">
+              <p>{{ workflowError }}</p>
+              <button class="secondary" @click="reconnect">重新连接</button>
+            </div>
+            <div v-if="partialAnswer" class="answer-preview">
+              <span class="muted">正在接收回答片段</span>
+              <p>{{ partialAnswer }}</p>
+            </div>
+          </section>
           <form class="message-composer" @submit.prevent="sendMessage">
+            <div v-if="historyRefreshError" class="chat-error" role="alert">
+              <p>最新历史读取失败，回答可能已保存。{{ historyRefreshError }}</p>
+              <button type="button" class="secondary" @click="refreshHistory">重新读取历史</button>
+            </div>
             <label for="chat-content">咨询内容</label>
             <textarea
               id="chat-content"
@@ -168,14 +269,22 @@ function onInput(event: Event) {
               :disabled="sending"
               maxlength="4000"
               rows="4"
-              placeholder="输入问题，支持多行。发送后将保存到当前会话。"
+              placeholder="例如：参拍前需要了解什么？再帮我找北京的书画拍场。"
               aria-describedby="composer-help"
               @input="onInput"
             ></textarea>
             <div class="composer-footer">
               <span id="composer-help">{{ draft.length }} / 4000 · Enter 换行</span
-              ><button :disabled="sending || !draft.trim() || draft.length > 4000">
-                {{ sending ? '正在保存…' : sendError ? '重试保存' : '保存消息' }}
+              ><button :disabled="sending || runBusy || !draft.trim() || draft.length > 4000">
+                {{
+                  sending
+                    ? '正在发送…'
+                    : runBusy
+                      ? '回答处理中'
+                      : sendError
+                        ? '重试发送'
+                        : '发送问题'
+                }}
               </button>
             </div>
             <p v-if="sendError" class="chat-error" role="alert">
@@ -383,6 +492,57 @@ function onInput(event: Event) {
 .saved-notice {
   color: #47604c;
   font-size: 14px;
+}
+.workflow-panel {
+  margin: 0 24px 24px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8f4ed;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.workflow-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.workflow-heading button {
+  font-size: 12px;
+}
+.run-steps {
+  padding-left: 22px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.answer-preview p {
+  white-space: pre-wrap;
+}
+.answer-sources {
+  margin-top: 18px;
+  font-size: 13px;
+}
+.answer-sources summary {
+  cursor: pointer;
+  color: #7f3c2e;
+}
+.answer-sources ol {
+  padding-left: 20px;
+}
+.answer-sources li {
+  margin-top: 14px;
+  overflow-wrap: anywhere;
+}
+.answer-sources a {
+  color: #7f3c2e;
+}
+.source-version {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 5px;
 }
 @media (max-width: 760px) {
   .chat-page {
