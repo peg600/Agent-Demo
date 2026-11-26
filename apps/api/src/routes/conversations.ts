@@ -15,7 +15,12 @@ import {
   conversationDetailResponseSchema,
   sendMessageResponseSchema,
   messageListResponseSchema,
+  workflowRunResponseSchema,
+  workflowRunsResponseSchema,
+  runEventsQuerySchema,
 } from '@gard/contracts';
+import type { WorkflowRepository } from '../agent/ports.js';
+import { streamRunEvents } from './run-stream.js';
 import {
   ConversationError,
   unauthenticated,
@@ -42,6 +47,7 @@ export async function registerConversationRoutes(
   repository: ConversationRepository,
   clock: () => Date,
   config: () => ConversationConfig = readConversationConfig,
+  workflows?: { repository: WorkflowRepository; wake: () => void },
 ) {
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -182,7 +188,8 @@ export async function registerConversationRoutes(
         sendMessageSchema.parse(request.body),
         now,
       );
-      reply.status(result.duplicate ? 200 : 201);
+      reply.status(result.duplicate ? 200 : result.processing === 'queued' ? 202 : 201);
+      if (result.processing === 'queued') workflows?.wake();
       return result;
     }),
   );
@@ -197,4 +204,67 @@ export async function registerConversationRoutes(
       ),
     ),
   );
+  if (workflows) {
+    const runs = workflows.repository;
+    const streams = new Set<() => void>();
+    app.addHook('preClose', async () => {
+      for (const close of streams) close();
+    });
+    app.get(
+      '/api/conversations/:id/runs',
+      endpoint(workflowRunsResponseSchema, async (request, _reply, settings, now) => ({
+        data: await runs.list(requiredDigest(request, settings), id(request), now),
+      })),
+    );
+    app.get(
+      '/api/runs/:id',
+      endpoint(workflowRunResponseSchema, async (request, _reply, settings, now) => ({
+        data: await runs.detail(requiredDigest(request, settings), id(request), now),
+      })),
+    );
+    app.post(
+      '/api/runs/:id/cancel',
+      endpoint(workflowRunResponseSchema, async (request, _reply, settings, now) => {
+        z.object({}).strict().parse(request.body);
+        return { data: await runs.cancel(requiredDigest(request, settings), id(request), now) };
+      }),
+    );
+    app.get('/api/runs/:id/events', async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const settings = config();
+        const auth = requiredDigest(request, settings);
+        const runId = id(request);
+        const query = runEventsQuerySchema.parse(request.query);
+        const header = request.headers['last-event-id'];
+        const after =
+          header === undefined
+            ? query.after
+            : z.coerce.number().int().min(0).max(2147483647).parse(header);
+        const initial = await runs.events(auth, runId, after, clock());
+        if (after > initial.run.lastEventSequence)
+          throw new ConversationError(400, 'INVALID_CURSOR', '事件游标超出范围。');
+        return await streamRunEvents(
+          reply,
+          initial,
+          after,
+          (cursor) => runs.events(auth, runId, cursor, clock()),
+          streams,
+        );
+      } catch (error) {
+        if (reply.sent) return;
+        if (error instanceof z.ZodError)
+          return reply
+            .status(400)
+            .send({ error: { code: 'INVALID_REQUEST', message: '请求参数格式不正确。' } });
+        if (error instanceof ConversationError)
+          return reply
+            .status(error.status)
+            .send({ error: { code: error.code, message: error.message } });
+        return reply
+          .status(503)
+          .send({ error: { code: 'RUN_UNAVAILABLE', message: '运行状态暂不可用。' } });
+      }
+    });
+  }
 }

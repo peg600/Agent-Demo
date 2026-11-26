@@ -3,7 +3,7 @@ import { loadRootEnv, readConfig } from './config.js';
 
 loadRootEnv();
 const config = readConfig();
-const app = buildApp(config.logLevel);
+const app = buildApp(config.logLevel, { workflowWorkerEnabled: true });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
