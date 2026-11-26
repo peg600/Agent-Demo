@@ -12,7 +12,8 @@ import { RouterLink, RouterView } from 'vue-router';
     <nav aria-label="主导航">
       <RouterLink to="/" exact-active-class="active">拍卖会</RouterLink
       ><RouterLink to="/sessions" active-class="active">拍场目录</RouterLink
-      ><RouterLink to="/recommendations" active-class="active">拍场推荐</RouterLink>
+      ><RouterLink to="/recommendations" active-class="active">拍场推荐</RouterLink
+      ><RouterLink to="/chat" active-class="active">客服会话</RouterLink>
     </nav>
   </header>
   <div class="demo-banner">

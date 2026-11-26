@@ -5,6 +5,7 @@ import SessionsView from './views/SessionsView.vue';
 import EventDetailView from './views/EventDetailView.vue';
 import SessionDetailView from './views/SessionDetailView.vue';
 import RecommendationsView from './views/RecommendationsView.vue';
+import ChatView from './views/ChatView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -14,6 +15,7 @@ export const router = createRouter({
     { path: '/sessions', component: SessionsView },
     { path: '/sessions/:id', component: SessionDetailView },
     { path: '/recommendations', component: RecommendationsView },
+    { path: '/chat/:id?', component: ChatView },
     { path: '/setup', component: SetupView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
