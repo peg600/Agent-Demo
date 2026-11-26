@@ -17,6 +17,9 @@
     "test": "pnpm --filter @gard/contracts build && vitest run",
     "test:e2e": "pnpm --filter @gard/contracts build && playwright test",
     "deps:check": "node scripts/check-dependencies.mjs",
+    "db:generate": "pnpm --filter @gard/api db:generate",
+    "db:migrate": "pnpm --filter @gard/api db:migrate",
+    "db:seed": "pnpm --filter @gard/contracts build && pnpm --filter @gard/api db:seed",
     "check": "pnpm deps:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
