@@ -1,0 +1,36 @@
+{
+  "name": "gard-agent-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @gard/contracts build && pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @gard/contracts build && pnpm -r typecheck",
+    "lint": "eslint .",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig.base.json eslint.config.js vitest.config.ts playwright.config.ts apps packages tests",
+    "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.base.json eslint.config.js vitest.config.ts playwright.config.ts apps packages tests",
+    "test": "pnpm --filter @gard/contracts build && vitest run",
+    "test:e2e": "pnpm --filter @gard/contracts build && playwright test",
+    "deps:check": "node scripts/check-dependencies.mjs",
+    "check": "pnpm deps:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.19.4",
+    "eslint": "10.15.0",
+    "eslint-plugin-vue": "10.12.1",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.74.0",
+    "vite": "8.4.0",
+    "vitest": "5.1.2",
+    "vue-eslint-parser": "10.4.2"
+  }
+}

@@ -1,0 +1,7 @@
+# Run from the repository root: docker compose up -d --wait
+name: gard-local
+include:
+  - path: ./infra/compose.postgres.yaml
+    env_file: ./.env
+  - path: ./infra/ragflow/compose.yaml
+    env_file: ./infra/ragflow/.env

@@ -1,0 +1,19 @@
+# Keep the upstream stack isolated from the application's PostgreSQL.
+services:
+  langfuse-web:
+    ports: !override
+      - "127.0.0.1:3000:3000"
+  langfuse-worker:
+    ports: !reset []
+  langfuse-ai-gateway:
+    profiles: [gateway]
+    ports: !reset []
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  clickhouse:
+    ports: !reset []
+  minio:
+    ports: !override
+      - "127.0.0.1:9090:9000"

@@ -1,7 +1,22 @@
 # Agent-Demo
 An AI Customer Support Agent Demo
 
-一个在 Windows 本地运行的拍卖客服 Agent 演示项目，围绕参拍须知、拍场查询和对话式表单收集展开。当前处于项目初始化阶段，仓库已预留前后端目录，运行命令将在首个可执行版本中补充。
+嘉德智能客服 Agent 的 Windows 本地演示项目，目标包括参拍须知问答、拍场查询推荐、对话表单、多问题拆解及中断恢复。业务使用虚构资料，不连接真实拍卖生产系统。
+
+技术基线为 TypeScript、Node.js、Fastify、LangGraph、RAGFlow、PostgreSQL、Langfuse、Docker，模型使用 OpenAI API。当前已有开发方案、基础设施配置，以及 Vue/Vite 和 Fastify 最小开发入口；客服业务代码尚未实现。
+
+## 开发入口
+
+- [前后端开发环境](docs/development-toolchain.md)：依赖、启动、构建、检查和测试命令。
+- [架构与接口](docs/architecture.md)：服务分工、工作流、数据一致性和恢复方案。
+- [本地启动手册](docs/local-development.md)：Docker、端口、密钥、RAGFlow 和 Langfuse 准备步骤。
+- [Docker 配置与 G 盘数据](docs/docker-local.md)：统一 Compose 入口、端口、绑定目录和启动命令。
+- [分阶段实施与验收](docs/implementation-plan.md)：从环境到完整演示的任务和验证标准。
+- [官方资料](docs/sources.md)：固定版本及关键机制依据。
+
+数据库和 RAGFlow 在 Docker Desktop，前后端先在宿主机热更新；PostgreSQL/RAGFlow 数据绑定到本项目 `data/`，整个数据目录不提交 Git。根 `compose.yaml` 管理启动配置；当前尚未启动业务容器。
+
+基础前后端可以独立于 Docker 启动：在项目根目录执行 `pnpm dev`，访问 `http://127.0.0.1:5173`；运行 `pnpm check` 检查基础工程。实际依赖安装与验证结果见 [实施结果](docs/result.md)。
 
 ## 项目目录
 

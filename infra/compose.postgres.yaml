@@ -1,0 +1,31 @@
+name: gard-business
+services:
+  postgres:
+    # Locally verified PostgreSQL 19.0; immutable digest of the downloaded image.
+    image: postgres@sha256:4ea94de574c17f0372722806c949757050fbb1cd7648410fe45d6bba275cc00e
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gard_agent
+      POSTGRES_USER: gard_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/init-local-env.ps1 first}
+      PGDATA: /var/lib/postgresql/19/docker
+      TZ: UTC
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - type: bind
+        source: ../data/postgres
+        target: /var/lib/postgresql
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gard_dev -d gard_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 128mb
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

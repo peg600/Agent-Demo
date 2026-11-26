@@ -1,0 +1,187 @@
+# Adapted from RAGFlow v1.0.0 docker-compose*.yml; see vendor/UPSTREAM.json.
+# Deliberately contains only the CPU + Elasticsearch + MySQL dependency stack.
+name: gard-ragflow
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+services:
+  ragflow-cpu:
+    image: infiniflow/ragflow@sha256:ed8dff41a7530ed8fb037fe7479a7c535429d42fa8d00aec28b54bcbc056934d
+    restart: unless-stopped
+    env_file: .env
+    command: ["--enable-adminserver", "--init-superuser"]
+    environment:
+      KVROCKS_HOST: kvrocks
+      KVROCKS_PORT: "6379"
+      HF_HOME: /root/.cache/huggingface
+      RAGFLOW_INGESTOR_CONCURRENT_WORKERS: "1"
+      RAGFLOW_INGESTOR_PAGE_CONCURRENCY: "1"
+    depends_on:
+      mysql: { condition: service_healthy }
+      es01: { condition: service_healthy }
+      minio: { condition: service_healthy }
+      kvrocks: { condition: service_healthy }
+      nats: { condition: service_started }
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/logs
+        target: /ragflow/logs
+        bind: { create_host_path: false }
+      - type: bind
+        source: ../../data/ragflow/cache
+        target: /root/.cache
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./vendor/service_conf.yaml.template
+        target: /ragflow/conf/service_conf.yaml.template
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./vendor/entrypoint.sh
+        target: /ragflow/entrypoint.sh
+        read_only: true
+        bind: { create_host_path: false }
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }
+      nproc: { soft: 65535, hard: 65535 }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/api/v1/system/healthz"]
+      interval: 15s
+      timeout: 10s
+      start_period: 120s
+      retries: 40
+    networks: [ragflow]
+    logging: *logging
+
+  es01:
+    image: elasticsearch:8.11.3
+    restart: unless-stopped
+    environment:
+      node.name: es01
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Initialize the RAGFlow env file}
+      discovery.type: single-node
+      bootstrap.memory_lock: "false"
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      cluster.routing.allocation.disk.watermark.low: 5gb
+      cluster.routing.allocation.disk.watermark.high: 3gb
+      cluster.routing.allocation.disk.watermark.flood_stage: 2gb
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    mem_limit: 2g
+    tmpfs: ["/tmp:mode=1777,size=512m"]
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/elasticsearch
+        target: /usr/share/elasticsearch/data
+        bind: { create_host_path: false }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$$ELASTIC_PASSWORD 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s' > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [ragflow]
+    logging: *logging
+
+  mysql:
+    image: mysql:8.0.40
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:?Initialize the RAGFlow env file}
+    command:
+      - --max_connections=200
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --tls_version=TLSv1.2,TLSv1.3
+      - --init-file=/data/application/init.sql
+      # Windows NTFS bind mount: set BEFORE the first database initialization.
+      - --lower-case-table-names=1
+      - --innodb-buffer-pool-size=256M
+      - --innodb-redo-log-capacity=256M
+      - --binlog_expire_logs_seconds=259200
+      - --max-binlog-size=100M
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/mysql
+        target: /var/lib/mysql
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./vendor/init.sql
+        target: /data/application/init.sql
+        read_only: true
+        bind: { create_host_path: false }
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h 127.0.0.1 -uroot -Nse 'SELECT 1' > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 60
+    networks: [ragflow]
+    logging: *logging
+
+  minio:
+    # RAGFlow v1.0.0 upstream's S3-compatible object store image.
+    image: pgsty/silo:RELEASE.2026-08-06T00-00-00Z
+    restart: unless-stopped
+    command: ["server", "--console-address", ":9001", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-rag_flow}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?Initialize the RAGFlow env file}
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/minio
+        target: /data
+        bind: { create_host_path: false }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [ragflow]
+    logging: *logging
+
+  kvrocks:
+    image: apache/kvrocks:2.16.0
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/kvrocks/entrypoint.sh"]
+    user: "0:0"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Initialize the RAGFlow env file}
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/kvrocks
+        target: /var/lib/kvrocks
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./vendor/kvrocks-entrypoint.sh
+        target: /etc/kvrocks/entrypoint.sh
+        read_only: true
+        bind: { create_host_path: false }
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [ragflow]
+    logging: *logging
+
+  nats:
+    image: nats:2.14.2
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "--http_port", "8222"]
+    volumes:
+      - type: bind
+        source: ../../data/ragflow/nats
+        target: /data
+        bind: { create_host_path: false }
+    networks: [ragflow]
+    logging: *logging
+
+networks:
+  ragflow:
+    driver: bridge

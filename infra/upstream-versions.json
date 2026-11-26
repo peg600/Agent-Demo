@@ -1,0 +1,17 @@
+{
+  "verifiedOn": "2026-11-26",
+  "ragflow": {
+    "repository": "https://github.com/infiniflow/ragflow.git",
+    "tag": "v1.0.0",
+    "mode": "cpu,elasticsearch,metadata-mysql",
+    "target": "infra/ragflow/vendor"
+  },
+  "langfuse": {
+    "repository": "https://github.com/langfuse/langfuse.git",
+    "tag": "v4.86.0",
+    "target": "infra/langfuse/vendor"
+  },
+  "businessPostgres": "postgres@sha256:4ea94de574c17f0372722806c949757050fbb1cd7648410fe45d6bba275cc00e",
+  "businessPostgresVersion": "19.0",
+  "ragflowImage": "infiniflow/ragflow@sha256:ed8dff41a7530ed8fb037fe7479a7c535429d42fa8d00aec28b54bcbc056934d"
+}
