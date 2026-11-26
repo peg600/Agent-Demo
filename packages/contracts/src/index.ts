@@ -1,5 +1,6 @@
 import { z } from 'zod';
 export * from './auctions.js';
+export * from './conversations.js';
 
 export const liveHealthSchema = z.object({
   status: z.literal('ok'),
