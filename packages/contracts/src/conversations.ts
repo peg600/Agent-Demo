@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { answerSourceSchema } from './workflows.js';
 
 const instant = z.iso.datetime({ offset: true });
 export const conversationIdSchema = z.uuid();
@@ -49,6 +50,8 @@ export const conversationMessageSchema = z.object({
   content: z.string(),
   sequence: z.number().int().positive(),
   createdAt: instant,
+  runId: z.uuid().nullable().default(null),
+  sources: z.array(answerSourceSchema).max(50).default([]),
 });
 export const messageListQuerySchema = z
   .object({
@@ -61,11 +64,12 @@ export const messageListResponseSchema = z.object({
   nextBeforeSequence: z.number().int().positive().nullable(),
   hasMore: z.boolean(),
 });
-// This stage stores messages only. A workflow-run response is a later, explicit API change.
+// Old stored messages remain readable; new messages enqueue a durable workflow.
 export const sendMessageResponseSchema = z.object({
   data: conversationMessageSchema,
   duplicate: z.boolean(),
-  processing: z.literal('not_configured'),
+  processing: z.enum(['not_configured', 'queued']),
+  runId: z.uuid().nullable().default(null),
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
